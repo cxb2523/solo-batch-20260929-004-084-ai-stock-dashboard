@@ -1,5 +1,70 @@
 # 🚀 AI-Powered Stock Market Dashboard
 
+## tasksvc — Resident Task Orchestration Service
+
+`app/` is a persistent task orchestration service independent of the
+Streamlit dashboard. All queue logic (enqueue, scheduling, retry, recovery)
+lives in `app/queue.py`; `app/main.py` is only the thin HTTP entry point and
+`app/templates/audit.html` contains no business logic.
+
+### Run
+
+```bash
+pip install -r requirements.txt
+python -m uvicorn app.main:app --port 8000
+```
+
+State is persisted to SQLite in `jobs.db`.
+
+### API
+
+- `POST /tasks` — submit a JSON job; send `X-Idempotency-Key` to make
+  retried/concurrent submissions collapse to one `task_id` (the idempotency
+  row and the job row are written in one transaction; repeats return
+  `200` with `"reused": true` and do not consume rate-limit quota).
+- `GET /tasks/{task_id}` — current job state.
+- `POST /tasks/{task_id}/retry` — re-queue a failed job from the audit page.
+- `GET /audit` — read-only audit page: succeeded/failed/queued counters, the
+  latest 20 jobs (id, status, attempts, enqueued time), a Retry button on
+  failed rows, and a 5-second meta refresh.
+
+### Guarantees
+
+- **Idempotency**: concurrent requests with the same key create exactly one
+  job row.
+- **Rate limit**: sliding 60s window, at most 5 *new* tasks per window;
+  overflow returns `429` with a computed `Retry-After` header.
+- **Concurrency**: at most 4 jobs run at once; overflow stays queued and is
+  never dropped.
+- **Retry**: a failed job is retried with backoff up to 3 attempts; after
+  that it is marked `failed` with the reason in `last_error`.
+- **Recovery**: on startup, jobs still `running` with `started_at` older
+  than 90 seconds are re-enqueued (or marked `failed` if the retry limit was
+  reached); `succeeded` jobs are never touched.
+
+### Verify
+
+```bash
+python -m pytest -q
+# with the server running, fire 6 concurrent same-key submissions:
+python - <<'PY'
+import asyncio, httpx
+async def main():
+    async with httpx.AsyncClient() as c:
+        rs = await asyncio.gather(*(
+            c.post("http://127.0.0.1:8000/tasks",
+                   json={"n": i},
+                   headers={"X-Idempotency-Key": "k1"})
+            for i in range(6)))
+        print({r.status_code for r in rs},
+              len({r.json()["task_id"] for r in rs}))
+asyncio.run(main())
+PY
+# then open http://127.0.0.1:8000/audit and compare counters with jobs.db
+```
+
+---
+
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-red)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)

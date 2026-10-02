@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+jobs.db
+jobs.db-shm
+jobs.db-wal
+uvicorn.out.log
+uvicorn.err.log
+out/

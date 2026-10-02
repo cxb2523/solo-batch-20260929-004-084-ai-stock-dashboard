@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="5">
+  <title>tasksvc · audit</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; color: #1f2933; }
+    h1 { font-size: 1.3rem; }
+    .counts { display: flex; gap: 1rem; margin: 1rem 0; }
+    .count { padding: .6rem 1rem; border-radius: 6px; font-weight: 600; }
+    .succeeded { background: #d1fae5; color: #065f46; }
+    .failed { background: #fee2e2; color: #991b1b; }
+    .queued { background: #fef9c3; color: #854d0e; }
+    table { border-collapse: collapse; width: 100%; margin-top: .5rem; }
+    th, td { border: 1px solid #d9e2ec; padding: .5rem .75rem; text-align: left; }
+    th { background: #f0f4f8; font-size: .85rem; }
+    td.id { font-family: ui-monospace, monospace; font-size: .85rem; }
+    .status-succeeded { color: #065f46; }
+    .status-failed { color: #991b1b; font-weight: 600; }
+    .status-running { color: #1d4ed8; }
+    .status-queued { color: #854d0e; }
+    button { padding: .25rem .75rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>tasksvc audit (read-only, refreshes every 5s)</h1>
+  <div class="counts">
+    <span class="count succeeded" data-testid="count-succeeded">Succeeded: {{ counts.succeeded }}</span>
+    <span class="count failed" data-testid="count-failed">Failed: {{ counts.failed }}</span>
+    <span class="count queued" data-testid="count-queued">Queued: {{ counts.queued }}</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Status</th>
+        <th>Retries</th>
+        <th>Enqueued at (UTC)</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr data-testid="job-row" data-status="{{ job.status }}">
+        <td class="id">{{ job.id }}</td>
+        <td class="status-{{ job.status }}">{{ job.status }}</td>
+        <td data-testid="job-attempts">{{ job.attempts }}</td>
+        <td>{{ job.enqueued_at }}</td>
+        <td>
+          {% if job.status == "failed" %}
+          <form method="post" action="/tasks/{{ job.id }}/retry">
+            <button type="submit" data-testid="retry-button">Retry</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
